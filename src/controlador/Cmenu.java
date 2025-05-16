@@ -153,81 +153,90 @@ public class Cmenu {
     
     // método para procesar una venta
     private void procesarVenta() {
-        String nombreReceta = ventasP.getTRvendida().getText().trim().toLowerCase();
-        String cantidadStr = ventasP.getTCvendida().getText().trim();
+    String nombreReceta = ventasP.getTRvendida().getText().trim().toLowerCase();
+    String cantidadStr = ventasP.getTCvendida().getText().trim();
 
-        if (nombreReceta.isEmpty() || cantidadStr.isEmpty()) {
-            JOptionPane.showMessageDialog(ventasP, "Por favor, complete todos los campos.", "Error", JOptionPane.ERROR_MESSAGE);
+    if (nombreReceta.isEmpty() || cantidadStr.isEmpty()) {
+        JOptionPane.showMessageDialog(ventasP, "Por favor, complete todos los campos.", "Error", JOptionPane.ERROR_MESSAGE);
+        return;
+    }
+
+    try {
+        int cantidadVendida = Integer.parseInt(cantidadStr);
+        if (cantidadVendida <= 0) {
+            JOptionPane.showMessageDialog(ventasP, "La cantidad debe ser mayor a 0.", "Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        try {
-            int cantidadVendida = Integer.parseInt(cantidadStr);
-            if (cantidadVendida <= 0) {
-                JOptionPane.showMessageDialog(ventasP, "La cantidad debe ser mayor a 0.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            if (!inventario.getRecetas().containsKey(nombreReceta)) {
-                JOptionPane.showMessageDialog(ventasP, "La receta no existe en el inventario.", "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            Recetas receta = inventario.getRecetas().get(nombreReceta);
-            Map<String, Double> faltantes = new HashMap<>();
-
-            for (Map.Entry<String, List<Object>> entry : receta.getIngredientes().entrySet()) {
-                String productoNombre = entry.getKey();
-                double cantidadNecesaria = (double) entry.getValue().get(0) * cantidadVendida;
-
-                if (!inventario.getProductos().containsKey(productoNombre)) {
-                    JOptionPane.showMessageDialog(ventasP, "El producto '" + productoNombre + "' no está en el inventario.", "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-
-                List<Object> productoValores = inventario.getProductos().get(productoNombre);
-                double cantidadActual = (double) productoValores.get(0);
-
-                if (cantidadActual < cantidadNecesaria) {
-                    faltantes.put(productoNombre, cantidadNecesaria - cantidadActual);
-                } else {
-                    productoValores.set(0, cantidadActual - cantidadNecesaria);
-                }
-
-                // avisar si un producto está agotándo
-                if (cantidadActual - cantidadNecesaria < 5) {
-                    JOptionPane.showMessageDialog(ventasP, "El producto '" + productoNombre + "' está agotándose.", "Advertencia", JOptionPane.WARNING_MESSAGE);
-                }
-            }
-
-            if (!faltantes.isEmpty()) {
-                StringBuilder mensaje = new StringBuilder("No se puede procesar la venta. Faltan los siguientes productos:\n");
-                faltantes.forEach((producto, cantidadFaltante) -> mensaje.append("- ").append(producto).append(": ").append(cantidadFaltante).append("\n"));
-                JOptionPane.showMessageDialog(ventasP, mensaje.toString(), "Error", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-
-            // registrar la venta
-            LocalDateTime fecha = LocalDateTime.now();
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            String fechaFormateada = fecha.format(formatter);
-
-            ventas.getHistorial().add("Receta: " + nombreReceta + ", Cantidad: " + cantidadVendida + ", Fecha: " + fechaFormateada);
-            
-            // guardar ventas en el archivo
-            DatosVenta.guardarVentas(ventas.getHistorial());
-            DatosProducto.guardarProductos(inventario.getProductos());
-            JOptionPane.showMessageDialog(ventasP, "Venta registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
-            
-            ventasP.getTRvendida().setText("");
-            ventasP.getTCvendida().setText("");
-
-            mostrarHistorialVentas();
-
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(ventasP, "Por favor, ingrese un número válido.", "Error", JOptionPane.ERROR_MESSAGE);
+        if (!inventario.getRecetas().containsKey(nombreReceta)) {
+            JOptionPane.showMessageDialog(ventasP, "La receta no existe en el inventario.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
         }
+
+        Recetas receta = inventario.getRecetas().get(nombreReceta);
+        Map<String, Double> faltantes = new HashMap<>();
+
+        //Verificar si hay faltantes
+        for (Map.Entry<String, List<Object>> entry : receta.getIngredientes().entrySet()) {
+            String productoNombre = entry.getKey();
+            double cantidadNecesaria = (double) entry.getValue().get(0) * cantidadVendida;
+
+            if (!inventario.getProductos().containsKey(productoNombre)) {
+                JOptionPane.showMessageDialog(ventasP, "El producto '" + productoNombre + "' no está en el inventario.", "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            List<Object> productoValores = inventario.getProductos().get(productoNombre);
+            double cantidadActual = (double) productoValores.get(0);
+
+            if (cantidadActual < cantidadNecesaria) {
+                faltantes.put(productoNombre, cantidadNecesaria - cantidadActual);
+            }
+        }
+
+        if (!faltantes.isEmpty()) {
+            StringBuilder mensaje = new StringBuilder("No se puede procesar la venta. Faltan los siguientes productos:\n");
+            faltantes.forEach((producto, cantidadFaltante) -> mensaje.append("- ").append(producto).append(": ").append(cantidadFaltante).append("\n"));
+            JOptionPane.showMessageDialog(ventasP, mensaje.toString(), "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        //Descontar productos del inventario
+        for (Map.Entry<String, List<Object>> entry : receta.getIngredientes().entrySet()) {
+            String productoNombre = entry.getKey();
+            double cantidadNecesaria = (double) entry.getValue().get(0) * cantidadVendida;
+            List<Object> productoValores = inventario.getProductos().get(productoNombre);
+            double cantidadActual = (double) productoValores.get(0);
+            productoValores.set(0, cantidadActual - cantidadNecesaria);
+
+            // Avisar si un producto está agotándose
+            if (cantidadActual - cantidadNecesaria < 5) {
+                JOptionPane.showMessageDialog(ventasP, "El producto '" + productoNombre + "' está agotándose.", "Advertencia", JOptionPane.WARNING_MESSAGE);
+            }
+        }
+
+        //Registrar la venta
+        LocalDateTime fecha = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String fechaFormateada = fecha.format(formatter);
+
+        ventas.getHistorial().add("Receta: " + nombreReceta + ", Cantidad: " + cantidadVendida + ", Fecha: " + fechaFormateada);
+
+        // Guardar ventas y productos en archivo
+        DatosVenta.guardarVentas(ventas.getHistorial());
+        DatosProducto.guardarProductos(inventario.getProductos());
+
+        JOptionPane.showMessageDialog(ventasP, "Venta registrada correctamente.", "Éxito", JOptionPane.INFORMATION_MESSAGE);
+
+        ventasP.getTRvendida().setText("");
+        ventasP.getTCvendida().setText("");
+
+        mostrarHistorialVentas();
+
+    } catch (NumberFormatException e) {
+        JOptionPane.showMessageDialog(ventasP, "Por favor, ingrese un número válido.", "Error", JOptionPane.ERROR_MESSAGE);
     }
+}
 
     // método para mostrar el historial de ventas
     private void mostrarHistorialVentas() {
